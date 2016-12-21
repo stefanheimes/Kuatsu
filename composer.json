@@ -1,0 +1,51 @@
+{
+  "name": "stefanheimes/kuatsu",
+  "description": "Kuatsu core",
+  "keywords": [
+    "contao",
+    "kuatsu",
+    "core"
+  ],
+  "type": "contao-module",
+  "license": "LGPL-3.0+",
+  "authors": [
+    {
+      "name": "Stefan Heimes",
+      "email": "stefan_heimes@hotmail.com",
+      "role": "Developer"
+    }
+  ],
+  "support": {
+    "email": "stefan_heimes@hotmail.com",
+    "issues": "https://github.com/stefanheimes/Kuatsu/issues",
+    "wiki": "https://github.com/stefanheimes/Kuatsu/wiki",
+    "source": "https://github.com/stefanheimes/Kuatsu"
+  },
+  "require": {
+    "php": ">=5.6",
+    "contao/core": ">=3.2,<3.6"
+  },
+  "require-dev": {
+    "cyberspectrum/contao-toolbox": "~0.6",
+    "phpcq/all-tasks": "~1.1"
+  },
+  "autoload": {
+    "psr-0": {
+      "Kuatsu\\": "src"
+    }
+  },
+  "autoload-dev": {
+    "psr-0": {
+      "Kuatsu\\Test\\": "tests"
+    }
+  },
+  "extra": {
+    "contao": {
+      "sources": {
+        "contao": "system/modules/kuatsu"
+      }
+    }
+  },
+  "prefer-stable": true,
+  "minimum-stability": "dev"
+}
