@@ -69,7 +69,8 @@ class Structure
     public function __construct()
     {
         /** @var Environment $environment */
-        $environment    = $GLOBALS['kuatsu.environment.default'];
+        /** @var \Pimple $container */
+        $environment    = $GLOBALS['container']['kuatsu.environment.default'];
         $this->database = $environment->getDatabase();
     }
 
@@ -107,6 +108,20 @@ class Structure
     private function isKey($field)
     {
         return $field['type'] == 'index' && $field['index'] == 'KEY';
+    }
+
+    /**
+     * Check if the field is ignored.
+     *
+     * @param array $field The field information.
+     *
+     * @return bool True ignored.
+     */
+    protected function isDefaultIgnored($field)
+    {
+        $type = strtolower($field['type']);
+
+        return (in_array($type, $this->arrDefaultValueTypIgnore) || stristr($field['extra'], 'auto_increment'));
     }
 
     /**
@@ -182,26 +197,20 @@ class Structure
      */
     public function getTableStructure($tableName)
     {
-        $return = array();
+        // Get the field definition.
+        $fields  = $this->getFieldDefinition($tableName);
+        $options = $this->getTableOptions($tableName);
 
-        // Table status
-        $objStatus = $this->database->prepare('SHOW TABLE STATUS')->executeUncached();
-
-        while ($row = $objStatus->fetchAssoc()) {
-            if ($row['Name'] != $tableName) {
-                continue;
-            }
-
-            $return['TABLE_OPTIONS'] = ' ENGINE=' . $row['Engine'] . ' DEFAULT CHARSET=' . substr($row['Collation'], 0,
-                    strpos($row['Collation'], '_')) . '';
-            if ($row['Auto_increment'] != '') {
-                $return['TABLE_OPTIONS'] .= ' AUTO_INCREMENT=' . $row['Auto_increment'] . ' ';
-            }
-        }
-
-        return $return;
+        return array_merge($fields, $options);
     }
 
+    /**
+     * Get the field definition.
+     *
+     * @param string $tableName The name of the table.
+     *
+     * @return array The list with the fields.
+     */
     protected function getFieldDefinition($tableName)
     {
         // Get list of fields.
@@ -212,10 +221,12 @@ class Structure
         // Get list of indices.
         $arrIndexes = $this
             ->database
-            ->prepare('SHOW INDEX FROM `$tableName`')
+            ->prepare(sprintf('SHOW INDEX FROM `%s`', $tableName))
             ->execute()
             ->fetchAllAssoc();
 
+        // Run each field.
+        $return = [];
         foreach ($fields as $field) {
             // Get the name of the field.
             $name = $field['name'];
@@ -225,43 +236,42 @@ class Structure
                     'PRIMARY KEY (`%s`)',
                     implode('`,`', $field['index_fields'])
                 );
+
+                continue;
             } elseif ($this->isUnique($field)) {
                 $return['TABLE_CREATE_DEFINITIONS'][$name] = sprintf(
                     'UNIQUE KEY `%s` (`%s`)',
                     $name,
                     implode('`,`', $field['index_fields'])
                 );
+                continue;
             } elseif ($this->isKey($field)) {
                 $return['TABLE_CREATE_DEFINITIONS'][$name] = $this->getKeys($arrIndexes, $field);
+
+                continue;
             }
 
-//            $field['name'] = '`' . $field['name'] . '`';
-
-
+            unset($field['index']);
 
             // Default values
-            if (in_array(strtolower($field['type']), $this->arrDefaultValueTypIgnore) || stristr($field['extra'], 'auto_increment')
-            ) {
+            if ($this->isDefaultIgnored($field)) {
                 unset($field['default']);
+            } elseif (strtolower($field['default']) == 'null') {
+                $field['default'] = 'default NULL';
+            } elseif (is_null($field['default'])) {
+                $field['default'] = '';
+            } elseif (in_array(strtoupper($field['default']), $this->arrDefaultValueFunctionIgnore)) {
+                $field['default'] = 'default ' . $field['default'];
             } else {
-                if (strtolower($field['default']) == 'null') {
-                    $field['default'] = 'default NULL';
-                } else {
-                    if (is_null($field['default'])) {
-                        $field['default'] = '';
-                    } else {
-                        if (in_array(strtoupper($field['default']), $this->arrDefaultValueFunctionIgnore)) {
-                            $field['default'] = 'default ' . $field['default'];
-                        } else {
-                            $field['default'] = 'default \'' . $field['default'] . '\'';
-                        }
-                    }
-                }
+                $field['default'] = 'default \'' . $field['default'] . '\'';
             }
 
             // Field type
             if (strlen($field['length'])) {
                 $field['type'] .= '(' . $field['length'] . (strlen($field['precision']) ? ',' . $field['precision'] : '') . ')';
+
+                unset($field['length']);
+                unset($field['precision']);
             }
 
             // Remove elements from the list, we did not want.
@@ -269,17 +279,41 @@ class Structure
                 unset($field[$strKeyForUnset]);
             }
 
+            $field['name']                 = '`' . $field['name'] . '`';
             $return['TABLE_FIELDS'][$name] = trim(implode(' ', $field));
         }
+
+        return $return;
     }
 
-    protected function isDefaultIgnored($field)
+    /**
+     * Get the table options.
+     *
+     * @param string $tableName The name of the table.
+     *
+     * @return array The options.
+     */
+    protected function getTableOptions($tableName)
     {
-        $type = strtolower($field['type']);
+        // Table status
+        $objStatus = $this
+            ->database
+            ->prepare('SHOW TABLE STATUS')
+            ->execute();
 
-        in_array(, $this->arrDefaultValueTypIgnore)
-        || stristr($field['extra'], 'auto_increment') !== false()
+        $return = [];
+        while ($row = $objStatus->fetchAssoc()) {
+            if ($row['Name'] != $tableName) {
+                continue;
+            }
+            $return['TABLE_OPTIONS'] = ' ENGINE=' . $row['Engine'] . ' DEFAULT CHARSET=' . substr($row['Collation'], 0,
+                    strpos($row['Collation'], '_')) . '';
+
+            if ($row['Auto_increment'] != '') {
+                $return['TABLE_OPTIONS'] .= ' AUTO_INCREMENT=' . $row['Auto_increment'] . ' ';
+            }
+        }
+
+        return $return;
     }
-
-
 }
