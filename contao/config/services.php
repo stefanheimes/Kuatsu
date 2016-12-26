@@ -7,11 +7,25 @@
  */
 
 use Kuatsu\Environment;
+use Kuatsu\Events\BuildEnvironmentEvent;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 
 /** @var Pimple $container */
 
-$container['kuatsu.environment.default'] = $container->protect(
-    function () {
-        return new Environment();
-    }
-);
+/**
+ * Build the environment.
+ *
+ * @param Pimple $c The container.
+ *
+ * @return Environment
+ */
+$container['kuatsu.environment.default'] = function ($c) {
+
+    $env = new Environment();
+    $event = new BuildEnvironmentEvent($env);
+    /** @var EventDispatcher $eventDispatcher */
+    $eventDispatcher = $c['event-dispatcher'];
+    $eventDispatcher->dispatch($event::NAME, $event);
+
+    return $event->getEnv();
+};
